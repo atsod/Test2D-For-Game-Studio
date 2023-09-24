@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using TMPro;
 
+[System.Serializable]
 public class Inventory : MonoBehaviour
 {
     public static Inventory Instance { get; private set; }
@@ -11,21 +12,22 @@ public class Inventory : MonoBehaviour
     [SerializeField] private GameObject _itemPrefab;
     [SerializeField] private GameObject _inventoryMainObject;
     [SerializeField] private RectTransform _movingObjectTransform;
+    [SerializeField] private GameObject _deletePanel;
 
     [SerializeField] private Camera _camera;
     [SerializeField] private EventSystem _eventSystem;
 
     private InventoryData _dataBase;
 
-    private bool _isTransparentModeOn;
-
-    private List<ItemInventory> _items = new ();
+    public List<ItemInventory> Items;
     private int _inventoryCapacity;
 
     private ItemInventory _currentItem;
     private int _currentID;
 
     private Vector3 _movingObjectOffset;
+
+    private bool _isSwapModeOn;
 
     private void Awake()
     {
@@ -41,8 +43,8 @@ public class Inventory : MonoBehaviour
 
         _dataBase = GetComponent<InventoryData>();
 
-        _items = new();
-        _inventoryCapacity = 45;
+        Items = new();
+        _inventoryCapacity = 30;
 
         _currentID = -1;
 
@@ -51,24 +53,17 @@ public class Inventory : MonoBehaviour
 
     private void Start()
     {
-        if(_items.Count == 0)
+        if(Items.Count == 0)
         {
             AddGraphics();
         }
-
-        // тестовое заполнение предметами
-        /*for(int i = 0; i < _inventoryCapacity; i++)
-        {
-            AddItem(i, _dataBase.Items[Random.Range(0, _dataBase.Items.Count)], Random.Range(1, 100));
-        }
-        UpdateInventory();*/
     }
 
     private void Update()
     {
         if(_currentID != -1)
         {
-            MoveObject();
+            MoveItem();
         }
     }
 
@@ -90,9 +85,9 @@ public class Inventory : MonoBehaviour
 
             Button tempButton = newItem.GetComponent<Button>();
 
-            tempButton.onClick.AddListener(delegate { SelectObject(); });
+            tempButton.onClick.AddListener(delegate { ToggleItemMode(_isSwapModeOn); });
 
-            _items.Add(ii);
+            Items.Add(ii);
         }
     }
 
@@ -100,18 +95,18 @@ public class Inventory : MonoBehaviour
     {
         for(int i = 0; i < _inventoryCapacity; i++)
         {
-            int itemInventoryId = _items[i].Id;
+            int itemInventoryId = Items[i].Id;
 
-            if (itemInventoryId != 0 && _items[i].Count > 1)
+            if (itemInventoryId != 0 && Items[i].Count > 1)
             {
-                _items[i].ItemGameObject.GetComponentInChildren<TextMeshProUGUI>().text = _items[i].Count.ToString();
+                Items[i].ItemGameObject.GetComponentInChildren<TextMeshProUGUI>().text = Items[i].Count.ToString();
             }
             else
             {
-                _items[i].ItemGameObject.GetComponentInChildren<TextMeshProUGUI>().text = "";
+                Items[i].ItemGameObject.GetComponentInChildren<TextMeshProUGUI>().text = "";
             }
 
-            _items[i].ItemGameObject.GetComponent<Image>().sprite = _dataBase.Items[itemInventoryId].Image;
+            Items[i].ItemGameObject.GetComponent<Image>().sprite = _dataBase.Items[itemInventoryId].Image;
         }
     }
 
@@ -119,16 +114,16 @@ public class Inventory : MonoBehaviour
     {
         for (int i = 0; i < _inventoryCapacity; i++)
         {
-            if (_items[i].Id == item.Id)
+            if (Items[i].Id == item.Id)
             {
-                if (_items[0].Count < 128)
+                if (Items[0].Count < 128)
                 {
-                    _items[i].Count += count;
+                    Items[i].Count += count;
 
-                    if (_items[i].Count > 128)
+                    if (Items[i].Count > 128)
                     {
-                        count = _items[i].Count - 128;
-                        _items[i].Count -= count;
+                        count = Items[i].Count - 128;
+                        Items[i].Count -= count;
                     }
                     else
                     {
@@ -148,7 +143,7 @@ public class Inventory : MonoBehaviour
         {
             for (int i = 0; i < _inventoryCapacity; i++)
             {
-                if (_items[i].Id == 0)
+                if (Items[i].Id == 0)
                 {
                     AddItem(i, item, count);
                     i = _inventoryCapacity;
@@ -159,13 +154,43 @@ public class Inventory : MonoBehaviour
         UpdateInventory();
     }
 
-    public void SelectObject()
+    private void MoveItem()
     {
-        Debug.Log(_currentID);
+        Vector3 pos = Input.mousePosition + _movingObjectOffset;
+        pos.z = _inventoryMainObject.GetComponent<RectTransform>().position.z;
+        _movingObjectTransform.position = _camera.ScreenToWorldPoint(pos);
+    }
+
+    public void ToggleSwapMode(bool isSwapModeOn)
+    {
+        _isSwapModeOn = isSwapModeOn;
+    }
+
+    private void ToggleItemMode(bool isSwapModeOn)
+    {
+        if (isSwapModeOn)
+        {
+            SwapItemsMode();
+        }
+        else
+        {
+            DeleteItemMode();
+        }
+    }
+
+    private void SwapItemsMode()
+    {
         if (_currentID == -1)
         {
             _currentID = int.Parse(_eventSystem.currentSelectedGameObject.name);
-            _currentItem = CopyInventoryItem(_items[_currentID]);
+
+            if (Items[_currentID].Id == 0)
+            {
+                _currentID = -1;
+                return;
+            }
+
+            _currentItem = CopyInventoryItem(Items[_currentID]);
 
             _movingObjectTransform.gameObject.SetActive(true);
             _movingObjectTransform.GetComponent<Image>().sprite = _dataBase.Items[_currentItem.Id].Image;
@@ -174,16 +199,16 @@ public class Inventory : MonoBehaviour
         }
         else
         {
-            ItemInventory itemInventory = _items[int.Parse(_eventSystem.currentSelectedGameObject.name)];
+            ItemInventory itemInventory = Items[int.Parse(_eventSystem.currentSelectedGameObject.name)];
 
-            if(_currentItem.Id != itemInventory.Id) 
+            if (_currentItem.Id != itemInventory.Id)
             {
                 AddInventoryItem(_currentID, itemInventory);
                 AddInventoryItem(int.Parse(_eventSystem.currentSelectedGameObject.name), _currentItem);
             }
             else
             {
-                if(itemInventory.Count + _currentItem.Count <= 128)
+                if (itemInventory.Count + _currentItem.Count <= 128)
                 {
                     itemInventory.Count += _currentItem.Count;
                 }
@@ -193,7 +218,7 @@ public class Inventory : MonoBehaviour
                     itemInventory.Count = 128;
                 }
 
-                if(itemInventory.Count > 1)
+                if (itemInventory.Count > 1)
                 {
                     itemInventory.ItemGameObject.GetComponentInChildren<TextMeshProUGUI>().text = itemInventory.Count.ToString();
                 }
@@ -205,48 +230,89 @@ public class Inventory : MonoBehaviour
         }
     }
 
-    private void MoveObject()
+    private void AddItem(int id, Item item, int count)
     {
-        Vector3 pos = Input.mousePosition + _movingObjectOffset;
-        pos.z = _inventoryMainObject.GetComponent<RectTransform>().position.z;
-        _movingObjectTransform.position = _camera.ScreenToWorldPoint(pos);
-    }
-
-    public void AddItem(int id, Item item, int count)
-    {
-        _items[id].Id = item.Id;
-        _items[id].Count = count;
-        _items[id].ItemGameObject.GetComponent<Image>().sprite = item.Image;
+        Items[id].Id = item.Id;
+        Items[id].Count = count;
+        Items[id].ItemGameObject.GetComponent<Image>().sprite = item.Image;
 
         if (item.Id != 0 && count > 1)
         {
-            _items[id].ItemGameObject.GetComponentInChildren<TextMeshProUGUI>().text = count.ToString();
+            Items[id].ItemGameObject.GetComponentInChildren<TextMeshProUGUI>().text = count.ToString();
         }
         else
         {
-            _items[id].ItemGameObject.GetComponentInChildren<TextMeshProUGUI>().text = "";
+            Items[id].ItemGameObject.GetComponentInChildren<TextMeshProUGUI>().text = "";
         }
     }
 
-    public void AddInventoryItem(int id, ItemInventory invItem)
+    private void AddInventoryItem(int id, ItemInventory invItem)
     {
-        _items[id].Id = invItem.Id;
-        _items[id].Count = invItem.Count;
-        _items[id].ItemGameObject.GetComponent<Image>().sprite = _dataBase.Items[invItem.Id].Image;
+        Items[id].Id = invItem.Id;
+        Items[id].Count = invItem.Count;
+        Items[id].ItemGameObject.GetComponent<Image>().sprite = _dataBase.Items[invItem.Id].Image;
 
         if (invItem.Id != 0 && invItem.Count > 1)
         {
-            _items[id].ItemGameObject.GetComponentInChildren<TextMeshProUGUI>().text = invItem.Count.ToString();
+            Items[id].ItemGameObject.GetComponentInChildren<TextMeshProUGUI>().text = invItem.Count.ToString();
         }
         else
         {
-            _items[id].ItemGameObject.GetComponentInChildren<TextMeshProUGUI>().text = "";
+            Items[id].ItemGameObject.GetComponentInChildren<TextMeshProUGUI>().text = "";
         }
+    }
+
+    private void DeleteItemMode()
+    {
+        _currentID = int.Parse(_eventSystem.currentSelectedGameObject.name);
+
+        if (Items[_currentID].Id != 0)
+        {
+            _deletePanel.SetActive(true);
+        }
+        else
+        {
+            _currentID = -1;
+        }
+    }
+
+    public void DeleteItemFromInventory(bool isDeleting)
+    {
+        if (isDeleting)
+        {
+            AddItem(_currentID, _dataBase.Items[0], 0);
+        }
+
+        _currentID = -1;
+
+        _deletePanel.SetActive(false);
+    }
+
+    public bool DeleteAmountOfItem(int itemId, int itemAmount)
+    {
+        for (int i = 0; i < _inventoryCapacity; i++)
+        {
+            if (Items[i].Id == itemId)
+            {
+                Items[i].Count -= itemAmount;
+
+                if (Items[i].Count == 0)
+                {
+                    AddItem(i, _dataBase.Items[0], 0);
+                }
+
+                UpdateInventory();
+
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public ItemInventory CopyInventoryItem(ItemInventory old)
     {
-        ItemInventory newItem = new ();
+        ItemInventory newItem = new();
 
         newItem.Id = old.Id;
         newItem.ItemGameObject = old.ItemGameObject;
@@ -256,6 +322,7 @@ public class Inventory : MonoBehaviour
     }
 }
 
+
 [System.Serializable]
 public class ItemInventory
 {
@@ -264,3 +331,6 @@ public class ItemInventory
 
     public int Count;
 }
+
+
+

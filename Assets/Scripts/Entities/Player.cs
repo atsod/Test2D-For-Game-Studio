@@ -16,8 +16,11 @@ public class Player : Entity
     private float _bulletSpeed;
 
     private Rigidbody2D _rigidBody;
+    private Vector2 _playerSight;
 
     private bool _isInvulnerable;
+
+    private GameObject[] _enemies;
 
     private void OnEnable()
     {
@@ -43,14 +46,20 @@ public class Player : Entity
         }
 
         MaxHealthPoints = 100;
-        CurrentHealthPoints = MaxHealthPoints;
-        DamagePoints = 5; // В будущем через паттерн "Стратегия" урон будет варьироваться, в зависимости от оружия.
-        SpeedPoints = 3;
+        DamagePoints = 5;
+        SpeedPoints = 3f;
+        FOV_Distance = 5f;
 
         _bulletOffset = new Vector3(0, 0.4f, 0);
         _bulletSpeed = 5f;
 
         _rigidBody = GetComponent<Rigidbody2D>();
+        _playerSight = transform.localScale;
+    }
+
+    private void Start()
+    {
+        _enemies = GameObject.FindGameObjectsWithTag("Enemy");
     }
 
     void FixedUpdate()
@@ -60,17 +69,64 @@ public class Player : Entity
 
     private void Move()
     {
-        _rigidBody.MovePosition(_rigidBody.position + SpeedPoints * Time.fixedDeltaTime * _joystick.Direction);
+        Vector2 moveDirection = _joystick.Direction;
+
+        _rigidBody.MovePosition(_rigidBody.position + SpeedPoints * Time.fixedDeltaTime * moveDirection);
+        
+        RotateBody(moveDirection);
+    }
+
+    private void RotateBody(Vector2 direction)
+    {
+        if (direction.x < 0)
+        {
+            _playerSight = new(-1, 1);
+        }
+        else if (direction.x > 0)
+        {
+            _playerSight = new(1, 1);
+        }
+
+        transform.localScale = _playerSight;
     }
      
     public void Shoot()
     {
-        // Пуля будет лететь по направлению к противнику
-        Vector2 direction = Vector2.right;
+        if(!IsEnemyInFOV(out GameObject nearestEnemy))
+        {
+            return;
+        }
 
+        bool hasBullet = Inventory.Instance.DeleteAmountOfItem(1, 1);
+
+        if (!hasBullet)
+        {
+            return;
+        }
+
+        Vector3 enemyPosition = nearestEnemy.transform.position;
+        Vector3 playerPosition = transform.position;
+
+        Vector2 direction = (enemyPosition - playerPosition).normalized;
+        
         GameObject bullet = Instantiate(_bullet, transform.position + _bulletOffset, Quaternion.identity);
         Rigidbody2D bulletRB = bullet.GetComponent<Rigidbody2D>();
         bulletRB.velocity = _bulletSpeed * direction;
+    }
+
+    private bool IsEnemyInFOV(out GameObject nearestEnemy)
+    {
+        foreach(GameObject enemy in _enemies)
+        {
+            if(enemy != null && FOV_Distance > Vector2.Distance(enemy.transform.position, transform.position))
+            {
+                nearestEnemy = enemy;
+                return true;
+            }
+        }
+
+        nearestEnemy = null;
+        return false;
     }
 
     private void OnTriggerEnter2D(Collider2D collision)
@@ -81,15 +137,18 @@ public class Player : Entity
             Inventory.Instance.SearchForSameItem(item, item.Count);
             Destroy(collision.gameObject);
         }
+    }
 
-        if(collision.gameObject.GetComponent<Enemy>() != null)
+    private void OnTriggerStay2D(Collider2D collision)
+    {
+        if (collision.gameObject.GetComponent<Enemy>() != null)
         {
             Enemy enemy = collision.gameObject.GetComponent<Enemy>();
 
-            if(!_isInvulnerable)
+            if (!_isInvulnerable)
             {
                 OnPlayerHealthPointsChanged?.Invoke(enemy.DamagePoints);
-                StartCoroutine(InvulnerabilityCooldown(3f));
+                StartCoroutine(InvulnerabilityCooldown(1f));
             }
         }
     }

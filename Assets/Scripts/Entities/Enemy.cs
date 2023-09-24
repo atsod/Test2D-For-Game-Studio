@@ -3,12 +3,14 @@ using UnityEngine;
 
 public class Enemy : Entity
 {
-    public static event Action<int> OnEnemyHealthPointsChanged;
-    public static event Action OnEnemyKilled;
+    public event Action<int> OnEnemyHealthPointsChanged;
+    public event Action OnEnemyKilled;
 
     [SerializeField] private GameObject _monsterDrop;
 
     private Rigidbody2D _rigidBody;
+
+    private GameObject _player;
 
     private void OnEnable()
     {
@@ -27,9 +29,32 @@ public class Enemy : Entity
         MaxHealthPoints = 20;
         CurrentHealthPoints = MaxHealthPoints;
         DamagePoints = 10;
-        SpeedPoints = 3;
+        SpeedPoints = 2f;
+        FOV_Distance = 5f;
 
         _rigidBody = GetComponent<Rigidbody2D>();
+
+        _player = GameObject.FindGameObjectWithTag("Player");
+    }
+
+    private void FixedUpdate()
+    {
+        if (IsPlayerInFOV()) MoveToPlayer();
+    }
+
+    private void MoveToPlayer()
+    {
+        Vector3 playerPosition = _player.transform.position;
+        Vector3 enemyPosition = transform.position;
+
+        Vector3 direction = (playerPosition - enemyPosition).normalized;
+        
+        _rigidBody.MovePosition(_rigidBody.position + SpeedPoints * Time.fixedDeltaTime * (Vector2) direction);
+    }
+
+    private bool IsPlayerInFOV()
+    {
+        return FOV_Distance > Vector2.Distance(_player.transform.position, transform.position);
     }
 
     private void OnTriggerEnter2D(Collider2D collision)

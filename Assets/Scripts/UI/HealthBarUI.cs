@@ -3,7 +3,7 @@ using UnityEngine.UI;
 
 public abstract class HealthBarUI : MonoBehaviour
 {
-    [SerializeField] private Entity _liveEntity;
+    [SerializeField] protected Entity _liveEntity;
     [SerializeField] private Image _fillHealthBar;
 
     private Vector3 _healthBarOffset;
@@ -17,8 +17,8 @@ public abstract class HealthBarUI : MonoBehaviour
 
     private void Start()
     {
+        _HP = _liveEntity.CurrentHealthPoints;
         _maxHP = _liveEntity.MaxHealthPoints;
-        _HP = _maxHP;
 
         _fillHealthBar.fillAmount = _HP / _maxHP;
     }
